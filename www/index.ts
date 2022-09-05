@@ -1,18 +1,34 @@
-import init,{World,Direction} from 'wasm_game';
+import init,{World,Direction,GameStatus} from 'wasm_game';
+import { wasm } from 'webpack';
+import {random} from './utils/random'
 
-init().then(()=>{
+init().then(wasm=>{
     const CELL_SIZE=20;
     const TIME=1000;
     const GLOBAL_WIDTH=16;
-    const position=Date.now()%(GLOBAL_WIDTH*GLOBAL_WIDTH);
+    const position=random(GLOBAL_WIDTH*GLOBAL_WIDTH);
     const world=World.new(GLOBAL_WIDTH,position);
     const worldWidth=world.width();
+
+    const gameSataus=document.getElementById("game-status");
+    const gameControl=document.getElementById("game-control-btn")
     const canvas=<HTMLCanvasElement>document.getElementById("snake-world");
 
     const context=canvas.getContext("2d");
 
     canvas.width=worldWidth*CELL_SIZE;
     canvas.height=worldWidth*CELL_SIZE;
+
+    gameControl.addEventListener("click",()=>{
+        const status=world.game_status();
+        if(status===undefined){
+           gameControl.textContent="游戏中...";
+           world.start_game();
+           run();
+        }else{
+            location.reload();
+        }
+    })
 
     document.addEventListener("keydown",e=>{
         switch (e.code) {
@@ -48,26 +64,53 @@ init().then(()=>{
         
         context.stroke();
     }
+    function drawStaus(){
+        gameSataus.textContent=world.game_status_info();
+    }
 
     function drawSnake(){
-        const snake_index=world.snake_head_index();
-        const row=Math.floor(snake_index/worldWidth);
-        const col =snake_index%worldWidth;
+        const snakeCells=new Uint32Array(
+          wasm.memory.buffer,
+          world.snake_cell(),
+          world.snake_length(),
+        )
+        snakeCells.forEach((cellIndex,i)=>{
+          const col=cellIndex % worldWidth;
+          const row=Math.floor(cellIndex/worldWidth);
+          context.beginPath();
+          context.fillStyle=i===0?'#ccc':"#000";
+          context.fillRect(col*CELL_SIZE,row*CELL_SIZE,CELL_SIZE,CELL_SIZE);
+        })
+        context.stroke();
+    }
+    function drawReward(){
+        const index=world.reward_cell();
+        const row=Math.floor(index/worldWidth);
+        const col =index%worldWidth;
 
         context.beginPath();
+        context.fillStyle='#ff0000';
 
         context.fillRect(col*CELL_SIZE,row*CELL_SIZE,CELL_SIZE,CELL_SIZE)
 
         context.stroke();
+
+       
     }
 
 
     function draw() {
         drawWorld();
         drawSnake();
+        drawReward();
+        drawStaus();
     }
 
     function run() {
+        const status=world.game_status();
+        if(status==GameStatus.Lost || GameStatus.Won){
+           gameControl.textContent="再来一次";
+        }
         setTimeout(() => {
             context.clearRect(0,0,canvas.width,canvas.width)
             world.update();
@@ -75,5 +118,5 @@ init().then(()=>{
             requestAnimationFrame(run);
         },TIME);
     }
-   run();
+    draw();
 })
